@@ -2,8 +2,27 @@ import { useState, useCallback } from 'react';
 import { GameState, Question } from '@/types/game';
 import { questions } from '@/data/questions';
 import { prizeLadder } from '@/data/prizeLadder';
+import { apiFetch } from '@/lib/api';
 
 export const useGameLogic = () => {
+  const [dbQuestions, setDbQuestions] = useState<Question[]>(questions);
+  const [settings, setSettings] = useState({ timerEasy: 60, timerMedium: 60, timerHard: 0, revealAnswer: true, resetTimerPerQuestion: true });
+
+  const saveGameStatus = async (status: string, finalAmount: number, questionsAnswered: number) => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        await apiFetch('/game/history', {
+          method: 'POST',
+          body: JSON.stringify({ userId: user.id, status, finalAmount, questionsAnswered })
+        });
+      }
+    } catch (error) {
+      console.error('Failed to save history', error);
+    }
+  };
+
   const [gameState, setGameState] = useState<GameState>({
     currentPosition: 0,
     currentQuestion: null,
@@ -18,7 +37,36 @@ export const useGameLogic = () => {
     eliminatedChoices: [],
   });
 
-  const startGame = useCallback(() => {
+  const startGame = useCallback(async () => {
+    try {
+      // Fetch dynamic questions and settings
+      const apiSettings = await apiFetch('/game/settings');
+      if (apiSettings) {
+        setSettings({
+          timerEasy: apiSettings.timerEasy ?? 60,
+          timerMedium: apiSettings.timerMedium ?? 60,
+          timerHard: apiSettings.timerHard ?? 0,
+          revealAnswer: apiSettings.revealAnswer ?? true,
+          resetTimerPerQuestion: apiSettings.resetTimerPerQuestion ?? true,
+        });
+      }
+
+      const apiQuestions = await apiFetch('/game/questions');
+      if (apiQuestions && apiQuestions.length > 0) {
+        setDbQuestions(apiQuestions);
+        const firstQ = apiQuestions[0];
+        setGameState({
+          currentPosition: 1,
+          currentQuestion: firstQ,
+          lifelines: { fiftyFifty: true, askAudience: true, phoneAFriend: true },
+          status: 'in_progress', finalAmount: 0, usedFiftyFifty: false, eliminatedChoices: [],
+        });
+        return;
+      }
+    } catch (e) {
+      console.error('Failed to load DB questions, falling back to static data.');
+    }
+
     const firstQuestion = questions[0];
     setGameState({
       currentPosition: 1,
@@ -124,6 +172,7 @@ export const useGameLogic = () => {
       if (nextPosition > 15) {
         // Won the game!
         const finalPrize = prizeLadder[prizeLadder.length - 1].amount;
+        saveGameStatus('won', finalPrize, 15);
         setGameState((prev) => ({
           ...prev,
           status: 'won',
@@ -132,7 +181,7 @@ export const useGameLogic = () => {
         return { isCorrect: true, won: true, finalAmount: finalPrize };
       } else {
         // Move to next question
-        const nextQuestion = questions[nextPosition - 1];
+        const nextQuestion = dbQuestions[nextPosition - 1] || questions[nextPosition - 1]; // Fallback
         setTimeout(() => {
           setGameState((prev) => ({
             ...prev,
@@ -155,6 +204,8 @@ export const useGameLogic = () => {
         finalAmount = safeMilestones[safeMilestones.length - 1].amount;
       }
       
+      saveGameStatus('lost', finalAmount, gameState.currentPosition - 1);
+
       setTimeout(() => {
         setGameState((prev) => ({
           ...prev,
@@ -172,6 +223,8 @@ export const useGameLogic = () => {
       ? prizeLadder[gameState.currentPosition - 1].amount 
       : 0;
     
+    saveGameStatus('quit', currentPrize, gameState.currentPosition - 1);
+
     setGameState((prev) => ({
       ...prev,
       status: 'quit',
@@ -197,6 +250,7 @@ export const useGameLogic = () => {
 
   return {
     gameState,
+    settings,
     startGame,
     answerQuestion,
     quitGame,
