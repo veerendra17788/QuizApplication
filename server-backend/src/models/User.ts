@@ -9,6 +9,8 @@ const UserSchema = new mongoose.Schema(
     highScore: { type: Number, default: 0 },
     winnings: { type: Number, default: 0 },
     gamesPlayed: { type: Number, default: 0 },
+    activeQuizToken: { type: String, default: null },
+    activeQuizExpires: { type: Date, default: null },
     isAdmin: { type: Boolean, default: false },
   },
   { timestamps: true }

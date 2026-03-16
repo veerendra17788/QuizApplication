@@ -8,7 +8,7 @@ interface PrizeLadderProps {
 
 export const PrizeLadder = ({ currentPosition }: PrizeLadderProps) => {
   return (
-    <div className="w-full lg:w-52 flex flex-col h-full shrink-0 py-1">
+    <div className="w-full h-full flex flex-col shrink-0 py-1 overflow-hidden">
       {/* Header */}
       <div className="text-center mb-2 shrink-0">
         <span className="text-xs font-bold text-gold/80 uppercase tracking-widest">Prize Ladder</span>
@@ -54,7 +54,7 @@ export const PrizeLadder = ({ currentPosition }: PrizeLadderProps) => {
 
               {/* Amount */}
               <span className={cn(
-                'flex-1 font-bold text-right tabular-nums leading-none',
+                'flex-1 font-bold text-right tabular-nums leading-none pr-1',
                 isMillion && !isPassed ? 'text-gold glow-gold' : '',
                 isActive ? 'text-yellow-300' : isPassed ? 'text-muted-foreground/30 line-through' : 'text-foreground/80',
               )}>

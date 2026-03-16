@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { GameState, Question } from '@/types/game';
 import { questions } from '@/data/questions';
 import { prizeLadder } from '@/data/prizeLadder';
@@ -6,22 +6,17 @@ import { apiFetch } from '@/lib/api';
 
 export const useGameLogic = () => {
   const [dbQuestions, setDbQuestions] = useState<Question[]>(questions);
-  const [settings, setSettings] = useState({ timerEasy: 60, timerMedium: 60, timerHard: 0, revealAnswer: true, resetTimerPerQuestion: true });
-
-  const saveGameStatus = async (status: string, finalAmount: number, questionsAnswered: number) => {
-    try {
-      const userStr = localStorage.getItem('user');
-      if (userStr) {
-        const user = JSON.parse(userStr);
-        await apiFetch('/game/history', {
-          method: 'POST',
-          body: JSON.stringify({ userId: user.id, status, finalAmount, questionsAnswered })
-        });
-      }
-    } catch (error) {
-      console.error('Failed to save history', error);
-    }
-  };
+  const [settings, setSettings] = useState({ 
+    timerEasy: 60, 
+    timerMedium: 60, 
+    timerHard: 0, 
+    revealAnswer: true, 
+    resetTimerPerQuestion: true,
+    useFiftyFifty: true,
+    useAudiencePoll: true,
+    usePhoneFriend: true,
+    useSkip: true
+  });
 
   const [gameState, setGameState] = useState<GameState>({
     currentPosition: 0,
@@ -30,6 +25,7 @@ export const useGameLogic = () => {
       fiftyFifty: true,
       askAudience: true,
       phoneAFriend: true,
+      skip: true,
     },
     status: 'not_started',
     finalAmount: 0,
@@ -37,8 +33,80 @@ export const useGameLogic = () => {
     eliminatedChoices: [],
   });
 
+  // Polling for live audience results
+  useEffect(() => {
+    let interval: any;
+    if (gameState.status === 'in_progress' && gameState.pollCode) {
+      const fetchPollResults = async () => {
+        try {
+          const pollData = await apiFetch(`/poll/${gameState.pollCode}`);
+          if (pollData && pollData.votes) {
+            // Convert count to percentage
+            const votes = pollData.votes;
+            const total = Object.values(votes).reduce((a: any, b: any) => a + b, 0) as number;
+            
+            const results = { A: 0, B: 0, C: 0, D: 0 };
+            if (total > 0) {
+              (['A', 'B', 'C', 'D'] as const).forEach(choice => {
+                results[choice] = Math.round((votes[choice] / total) * 100);
+              });
+            }
+            
+            setGameState(prev => ({ ...prev, audienceResults: results }));
+          }
+        } catch (e) {
+          console.error('Error polling results', e);
+        }
+      };
+
+      fetchPollResults();
+      interval = setInterval(fetchPollResults, 2500);
+    }
+    return () => clearInterval(interval);
+  }, [gameState.status, gameState.pollCode]);
+
+  const saveGameStatus = async (status: string, finalAmount: number, questionsAnswered: number) => {
+    try {
+      const userStr = localStorage.getItem('user');
+      const quizToken = localStorage.getItem('quizToken');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        await apiFetch('/game/history', {
+          method: 'POST',
+          body: JSON.stringify({ 
+            userId: user.id, 
+            status, 
+            finalAmount, 
+            questionsAnswered,
+            quizToken 
+          })
+        });
+        // Clear session token on game end
+        localStorage.removeItem('quizToken');
+      }
+    } catch (error) {
+      console.error('Failed to save history', error);
+    }
+  };
+
   const startGame = useCallback(async () => {
     try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        const savedToken = localStorage.getItem('quizToken');
+        
+        // Request game start and lock session
+        const lockResponse = await apiFetch('/game/start', {
+          method: 'POST',
+          body: JSON.stringify({ userId: user.id, quizToken: savedToken })
+        });
+
+        if (lockResponse.quizToken) {
+          localStorage.setItem('quizToken', lockResponse.quizToken);
+        }
+      }
+
       // Fetch dynamic questions and settings
       const apiSettings = await apiFetch('/game/settings');
       if (apiSettings) {
@@ -48,6 +116,10 @@ export const useGameLogic = () => {
           timerHard: apiSettings.timerHard ?? 0,
           revealAnswer: apiSettings.revealAnswer ?? true,
           resetTimerPerQuestion: apiSettings.resetTimerPerQuestion ?? true,
+          useFiftyFifty: apiSettings.useFiftyFifty ?? true,
+          useAudiencePoll: apiSettings.useAudiencePoll ?? true,
+          usePhoneFriend: apiSettings.usePhoneFriend ?? true,
+          useSkip: apiSettings.useSkip ?? true,
         });
       }
 
@@ -58,13 +130,21 @@ export const useGameLogic = () => {
         setGameState({
           currentPosition: 1,
           currentQuestion: firstQ,
-          lifelines: { fiftyFifty: true, askAudience: true, phoneAFriend: true },
-          status: 'in_progress', finalAmount: 0, usedFiftyFifty: false, eliminatedChoices: [],
+          lifelines: { fiftyFifty: true, askAudience: true, phoneAFriend: true, skip: true },
+          status: 'in_progress', 
+          finalAmount: 0, 
+          usedFiftyFifty: false, 
+          eliminatedChoices: [],
+          isLocked: false
         });
         return;
       }
-    } catch (e) {
-      console.error('Failed to load DB questions, falling back to static data.');
+    } catch (e: any) {
+      if (e.message?.includes('SESSION_LOCKED')) {
+        setGameState(prev => ({ ...prev, isLocked: true }));
+        return;
+      }
+      console.error('Failed to start game properly, falling back to static questions.', e);
     }
 
     const firstQuestion = questions[0];
@@ -75,6 +155,7 @@ export const useGameLogic = () => {
         fiftyFifty: true,
         askAudience: true,
         phoneAFriend: true,
+        skip: true,
       },
       status: 'in_progress',
       finalAmount: 0,
@@ -102,42 +183,48 @@ export const useGameLogic = () => {
     }));
   }, [gameState.currentQuestion, gameState.lifelines.fiftyFifty]);
 
-  const useAskAudience = useCallback(() => {
+  const useAskAudience = useCallback(async () => {
     if (!gameState.currentQuestion || !gameState.lifelines.askAudience) return;
 
-    const correctChoice = gameState.currentQuestion.correctChoice;
-    const level = gameState.currentQuestion.level;
+    const question = gameState.currentQuestion;
     
-    // Simulate audience voting with bias toward correct answer
-    // Higher levels = less confident audience
-    const correctWeight = Math.max(40, 90 - level * 3);
-    const noise = 100 - correctWeight;
-    
-    const results = { A: 0, B: 0, C: 0, D: 0 };
-    results[correctChoice] = correctWeight + Math.random() * 10 - 5;
-    
-    const otherChoices = (['A', 'B', 'C', 'D'] as const).filter((c) => c !== correctChoice);
-    const remaining = 100 - results[correctChoice];
-    
-    otherChoices.forEach((choice, idx) => {
-      if (idx === otherChoices.length - 1) {
-        results[choice] = Math.max(0, 100 - Object.values(results).reduce((a, b) => a + b, 0));
-      } else {
-        results[choice] = (remaining / otherChoices.length) + Math.random() * 15 - 7.5;
+    try {
+      const response = await apiFetch('/poll/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          question: question.text,
+          choices: {
+            A: question.choiceA,
+            B: question.choiceB,
+            C: question.choiceC,
+            D: question.choiceD
+          }
+        })
+      });
+
+      if (response.code) {
+        setGameState((prev) => ({
+          ...prev,
+          lifelines: { ...prev.lifelines, askAudience: false },
+          pollCode: response.code,
+          audienceResults: { A: 0, B: 0, C: 0, D: 0 }
+        }));
       }
-    });
-
-    // Normalize to 100%
-    const total = Object.values(results).reduce((a, b) => a + b, 0);
-    Object.keys(results).forEach((key) => {
-      results[key as 'A' | 'B' | 'C' | 'D'] = Math.round((results[key as 'A' | 'B' | 'C' | 'D'] / total) * 100);
-    });
-
-    setGameState((prev) => ({
-      ...prev,
-      lifelines: { ...prev.lifelines, askAudience: false },
-      audienceResults: results,
-    }));
+    } catch (e) {
+      console.error('Failed to create live poll', e);
+      // Fallback to fake data if poll creation fails
+      const correctChoice = question.correctChoice;
+      const results = { A: 0, B: 0, C: 0, D: 0 };
+      results[correctChoice] = 70;
+      (['A','B','C','D'] as const).forEach(c => {
+        if (c !== correctChoice) results[c] = 10;
+      });
+      setGameState(prev => ({
+        ...prev,
+        lifelines: { ...prev.lifelines, askAudience: false },
+        audienceResults: results
+      }));
+    }
   }, [gameState.currentQuestion, gameState.lifelines.askAudience]);
 
   const usePhoneFriend = useCallback(() => {
@@ -160,6 +247,47 @@ export const useGameLogic = () => {
       phoneAdvice: advice,
     }));
   }, [gameState.currentQuestion, gameState.lifelines.phoneAFriend]);
+  
+  const useSkip = useCallback(() => {
+    if (gameState.status !== 'in_progress' || !gameState.lifelines.skip) return;
+    
+    const nextPosition = gameState.currentPosition + 1;
+    
+    if (nextPosition > 15) {
+      // If skipping the last question, they win what they have? 
+      // Actually skip usually just moves to the next question of the same level or advances.
+      // In this engine, questions are 1-per-level, so skip moves to next level.
+      const finalPrize = prizeLadder[prizeLadder.length - 1].amount;
+      saveGameStatus('won', finalPrize, 15);
+      setGameState((prev) => ({
+        ...prev,
+        status: 'won',
+        finalAmount: finalPrize,
+      }));
+      return;
+    }
+
+    const nextQuestion = dbQuestions[nextPosition - 1] || questions[nextPosition - 1];
+    
+    setGameState((prev) => ({
+      ...prev,
+      currentPosition: nextPosition,
+      currentQuestion: nextQuestion,
+      lifelines: { ...prev.lifelines, skip: false },
+      eliminatedChoices: [],
+      usedFiftyFifty: false,
+      audienceResults: undefined,
+      phoneAdvice: undefined,
+      pollCode: undefined,
+    }));
+
+    import('sonner').then(({ toast }) => {
+      toast.info("Question Skipped!", {
+        description: "Moving to the next stage...",
+        duration: 3000,
+      });
+    });
+  }, [gameState.status, gameState.currentPosition, gameState.lifelines.skip, dbQuestions]);
 
   const answerQuestion = useCallback((choice: 'A' | 'B' | 'C' | 'D') => {
     if (!gameState.currentQuestion) return { isCorrect: false };
@@ -191,6 +319,7 @@ export const useGameLogic = () => {
             usedFiftyFifty: false,
             audienceResults: undefined,
             phoneAdvice: undefined,
+            pollCode: undefined, // Clear poll for next question
           }));
         }, 2000);
         
@@ -216,7 +345,7 @@ export const useGameLogic = () => {
       
       return { isCorrect: false, finalAmount };
     }
-  }, [gameState.currentQuestion, gameState.currentPosition]);
+  }, [gameState.currentQuestion, gameState.currentPosition, dbQuestions]);
 
   const quitGame = useCallback(() => {
     const currentPrize = gameState.currentPosition > 0 
@@ -240,6 +369,7 @@ export const useGameLogic = () => {
         fiftyFifty: true,
         askAudience: true,
         phoneAFriend: true,
+        skip: true,
       },
       status: 'not_started',
       finalAmount: 0,
@@ -258,5 +388,8 @@ export const useGameLogic = () => {
     useFiftyFifty,
     useAskAudience,
     usePhoneFriend,
+    useSkip,
+    clearAudienceResults: () => setGameState(prev => ({ ...prev, audienceResults: null })),
+    clearPhoneAdvice: () => setGameState(prev => ({ ...prev, phoneAdvice: null })),
   };
 };

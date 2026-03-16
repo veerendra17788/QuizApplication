@@ -20,6 +20,7 @@ export interface Lifelines {
   fiftyFifty: boolean;
   askAudience: boolean;
   phoneAFriend: boolean;
+  skip: boolean;
 }
 
 export interface GameState {
@@ -32,4 +33,6 @@ export interface GameState {
   eliminatedChoices: ('A' | 'B' | 'C' | 'D')[];
   audienceResults?: { A: number; B: number; C: number; D: number };
   phoneAdvice?: string;
+  pollCode?: string;
+  isLocked?: boolean;
 }

@@ -9,10 +9,22 @@ import { LifelineButtons } from '@/components/game/LifelineButtons';
 import { Timer } from '@/components/game/Timer';
 import { AudienceResults } from '@/components/game/AudienceResults';
 import { PhoneFriendDialog } from '@/components/game/PhoneFriendDialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useGameLogic } from '@/hooks/useGameLogic';
 import { prizeLadder, formatPrize } from '@/data/prizeLadder';
 import { Card } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 import brainImg from '../../asserts/brain_img.png';
 
 const Index = () => {
@@ -26,6 +38,9 @@ const Index = () => {
     useFiftyFifty,
     useAskAudience,
     usePhoneFriend,
+    useSkip,
+    clearAudienceResults,
+    clearPhoneAdvice,
   } = useGameLogic();
 
   const navigate = useNavigate();
@@ -41,6 +56,20 @@ const Index = () => {
     const result = answerQuestion(choice);
     setAnswerResult(result);
     
+    if (result.isCorrect) {
+      const nextPrize = prizeLadder[gameState.currentPosition].amount;
+      toast.success(`Correct! You're now playing for ${formatPrize(nextPrize)}`, {
+        icon: '✅',
+        duration: 3000,
+      });
+    } else {
+      const correctChoice = gameState.currentQuestion?.correctChoice;
+      toast.error(`Wrong Answer! The correct choice was ${correctChoice}`, {
+        icon: '❌',
+        duration: 4000,
+      });
+    }
+
     setTimeout(() => {
       setSelectedAnswer(null);
       setShowResult(false);
@@ -50,6 +79,10 @@ const Index = () => {
 
   const handleTimeout = () => {
     if (gameState.status === 'in_progress' && !showResult) {
+      toast.error("Time's Up!", {
+        description: "You didn't answer in time.",
+        duration: 3000,
+      });
       const result = answerQuestion('A'); // Auto-fail on timeout
       setAnswerResult(result);
       setShowResult(true);
@@ -120,10 +153,18 @@ const Index = () => {
 
           {/* CTA Buttons */}
           <div className="flex flex-col gap-3 w-full max-w-xs">
+            {gameState.isLocked && (
+              <div className="mb-4 p-4 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-sm font-medium animate-pulse flex items-center gap-2 justify-center">
+                <ShieldCheck className="h-5 w-5" />
+                Active quiz detected on another device. Please wait or finish it.
+              </div>
+            )}
+
             <Button
               onClick={startGame}
               size="lg"
-              className="gradient-gold text-game-bg font-bold text-lg px-10 py-5 shadow-gold hover:scale-105 transition-transform rounded-xl"
+              disabled={gameState.isLocked}
+              className={`gradient-gold text-game-bg font-bold text-lg px-10 py-5 shadow-gold transition-transform rounded-xl ${gameState.isLocked ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
             >
               <Play className="mr-2 h-5 w-5" />
               Start Game
@@ -173,6 +214,7 @@ const Index = () => {
     );
   }
 
+  // Game over screens
   // Game over screens
   if (gameState.status === 'won' || gameState.status === 'lost' || gameState.status === 'quit') {
     const isWinner = gameState.status === 'won';
@@ -274,7 +316,7 @@ const Index = () => {
   const timerDuration = currentBand === 'easy' ? settings.timerEasy : currentBand === 'medium' ? settings.timerMedium : settings.timerHard;
 
   return (
-    <div className="h-[100dvh] w-full flex flex-col overflow-hidden">
+    <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-background">
       <GameHeader currentPrize={currentPrize} />
       
       <div className="flex-1 flex flex-row gap-4 px-4 py-3 max-w-7xl mx-auto w-full overflow-hidden">
@@ -293,9 +335,9 @@ const Index = () => {
             </div>
           )}
 
-          {/* Question + Options */}
-          {gameState.currentQuestion && (
-            <div className="flex-1 min-h-0">
+          {/* Question Area */}
+          <div className="flex-1 min-h-0">
+            {gameState.currentQuestion && (
               <QuestionCard
                 key={gameState.currentPosition}
                 question={gameState.currentQuestion}
@@ -306,44 +348,73 @@ const Index = () => {
                 isCorrect={answerResult?.isCorrect ?? null}
                 revealAnswer={settings.revealAnswer}
               />
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* Audience / Phone lifeline overlays */}
+          {/* Overlays */}
           {gameState.audienceResults && (
-            <div className="shrink-0">
-              <AudienceResults results={gameState.audienceResults} />
+            <div className="shrink-0 mb-2 relative z-20">
+              <AudienceResults 
+                results={gameState.audienceResults} 
+                pollCode={gameState.pollCode}
+                onClose={clearAudienceResults}
+              />
             </div>
           )}
           {gameState.phoneAdvice && (
-            <div className="shrink-0">
-              <PhoneFriendDialog advice={gameState.phoneAdvice} />
+            <div className="shrink-0 mb-2">
+              <PhoneFriendDialog 
+                advice={gameState.phoneAdvice} 
+                onClose={clearPhoneAdvice}
+              />
             </div>
           )}
 
-          {/* Bottom bar: Lifelines + Walk Away */}
-          <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 pb-1">
+          {/* Controls */}
+          <div className="shrink-0 flex items-center justify-between gap-2 pb-1">
             <LifelineButtons
               lifelines={gameState.lifelines}
               onFiftyFifty={useFiftyFifty}
               onAskAudience={useAskAudience}
               onPhoneFriend={usePhoneFriend}
+              onSkip={useSkip}
               disabled={showResult}
+              settings={settings as any}
             />
-            <Button
-              onClick={quitGame}
-              variant="outline"
-              size="sm"
-              className="shrink-0 border-destructive/50 text-destructive hover:bg-destructive/10 text-xs"
-              disabled={showResult}
-            >
-              Walk Away · {formatPrize(currentPrize)}
-            </Button>
+            
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 border-destructive/50 text-destructive hover:bg-destructive/10 text-xs"
+                  disabled={showResult}
+                >
+                  Walk Away · {formatPrize(currentPrize)}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="bg-card border-destructive/20">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-destructive flex items-center gap-2">
+                    <DollarSign className="h-5 w-5" /> Walk Away?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="text-muted-foreground">
+                    Are you sure you want to quit now? You will take home <span className="text-white font-bold">{formatPrize(currentPrize)}</span>.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="border-white/10">No, Continue Playing</AlertDialogCancel>
+                  <AlertDialogAction onClick={quitGame} className="bg-destructive hover:bg-destructive/90 text-white font-bold">
+                    Yes, Walk Away
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
 
         {/* ── Prize ladder ── */}
-        <div className="hidden lg:flex flex-col w-56 shrink-0 pl-1">
+        <div className="hidden lg:flex flex-col w-64 shrink-0 border-l border-border/30 pl-4">
           <PrizeLadder currentPosition={gameState.currentPosition} />
         </div>
       </div>

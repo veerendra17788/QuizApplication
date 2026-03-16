@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,6 +16,17 @@ import {
 import { formatPrize } from '@/data/prizeLadder';
 import brainImg from '../../asserts/brain_img.png';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Trophy,
   History,
@@ -44,7 +55,7 @@ interface GameSession {
   createdAt: string;
 }
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 5;
 
 const Profile = () => {
   const { user, logout, isLoading, fetchProfile } = useAuth();
@@ -94,54 +105,71 @@ const Profile = () => {
   const totalPages = Math.max(1, Math.ceil(history.length / PAGE_SIZE));
   const pagedHistory = history.slice((historyPage - 1) * PAGE_SIZE, historyPage * PAGE_SIZE);
 
-  // Stats
-  const wins = history.filter(h => h.status === 'won').length;
-  const winRate = history.length > 0 ? Math.round((wins / history.length) * 100) : 0;
+  // No stats calculation here anymore
 
   return (
     <div
       className="min-h-screen w-full"
       style={{ background: 'linear-gradient(135deg, hsl(220,30%,6%) 0%, hsl(230,35%,10%) 50%, hsl(220,30%,6%) 100%)' }}
     >
-      {/* ── Sticky Header ── */}
+      {/* ── Compact Header ── */}
       <header
         className="sticky top-0 z-30 backdrop-blur-md border-b border-white/5"
         style={{ background: 'hsl(220 25% 8% / 0.85)' }}
       >
-        <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 h-14 flex items-center justify-between">
           <button
             onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-gold transition-colors group"
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-gold transition-colors group"
           >
             <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
-            Back to Game
+            Back
           </button>
 
           <div className="flex items-center gap-2">
-            <img src={brainImg} alt="logo" className="h-7 w-7 object-contain" />
-            <span className="font-bold text-gold text-base hidden sm:block glow-gold">Million Quest</span>
+            <img src={brainImg} alt="logo" className="h-6 w-6 object-contain" />
+            <span className="font-bold text-gold text-sm hidden sm:block glow-gold">Million Quest</span>
           </div>
 
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/60 transition-all"
-          >
-            <LogOut className="h-4 w-4" />
-            <span className="hidden sm:inline">Logout</span>
-          </button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/60 transition-all"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="bg-card border-red-500/20">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-red-400 flex items-center gap-2">
+                  <LogOut className="h-5 w-5" /> Confirm Logout
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-muted-foreground">
+                  Are you sure you want to sign out of your account?
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="border-white/10">Stay Signed In</AlertDialogCancel>
+                <AlertDialogAction onClick={handleLogout} className="bg-red-500 hover:bg-red-600 text-white font-bold">
+                  Logout
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </header>
 
       {/* ── Main 2-column grid ── */}
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-8 items-start">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6 items-start">
 
           {/* ════ LEFT PANEL ════ */}
           <aside className="space-y-5 lg:sticky lg:top-24">
 
             {/* Player hero */}
             <div
-              className="relative rounded-2xl overflow-hidden p-6"
+              className="relative rounded-2xl overflow-hidden p-4"
               style={{
                 background: 'hsl(220 25% 12%)',
                 border: '1px solid hsl(45 93% 58% / 0.2)',
@@ -165,13 +193,13 @@ const Profile = () => {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-xl font-black text-foreground truncate">{user.name}</h1>
+                  <h1 className="text-lg font-black text-foreground truncate">{user.name}</h1>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <Mail className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
                   </div>
                   {user.isAdmin && (
-                    <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                    <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30">
                       <ShieldCheck className="h-3 w-3" /> Admin
                     </span>
                   )}
@@ -179,7 +207,7 @@ const Profile = () => {
               </div>
 
               {/* Change Password button */}
-              <div className="mt-5 pt-4 border-t border-white/5">
+              <div className="mt-4 pt-3 border-t border-white/5">
                 <PasswordChangeDialog userId={user.id} />
               </div>
             </div>
@@ -207,30 +235,7 @@ const Profile = () => {
               gradient="linear-gradient(135deg, hsl(142,70%,35%), hsl(142,71%,50%))"
             />
 
-            {/* Win-rate */}
-            {history.length > 0 && (
-              <div
-                className="rounded-2xl p-5"
-                style={{ background: 'hsl(220 25% 12%)', border: '1px solid hsl(220 15% 25%)' }}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    <TrendingUp className="h-3.5 w-3.5 text-gold" /> Win Rate
-                  </div>
-                  <span className="text-lg font-black text-gold">{winRate}%</span>
-                </div>
-                <div className="h-2 rounded-full overflow-hidden" style={{ background: 'hsl(220 15% 20%)' }}>
-                  <div
-                    className="h-full rounded-full transition-all duration-1000"
-                    style={{ width: `${winRate}%`, background: 'linear-gradient(90deg, hsl(42,80%,45%), hsl(45,93%,58%))' }}
-                  />
-                </div>
-                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                  <span>{wins} wins</span>
-                  <span>{history.length - wins} losses / quits</span>
-                </div>
-              </div>
-            )}
+            {/* Win-rate removed */}
           </aside>
 
           {/* ════ RIGHT PANEL — Paginated History ════ */}
@@ -239,14 +244,14 @@ const Profile = () => {
             style={{ background: 'hsl(220 25% 12%)', border: '1px solid hsl(220 15% 25%)' }}
           >
             {/* Header */}
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-white/5">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'hsl(210 80% 45% / 0.15)' }}>
-                <History className="h-4 w-4 text-blue-400" />
+            <div className="flex items-center gap-3 px-5 py-3 border-b border-white/5">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'hsl(210 80% 45% / 0.15)' }}>
+                <History className="h-3.5 w-3.5 text-blue-400" />
               </div>
-              <h2 className="text-base font-bold">Game History</h2>
+              <h2 className="text-sm font-bold">Game History</h2>
               {history.length > 0 && (
                 <span
-                  className="ml-auto text-xs px-2.5 py-1 rounded-full font-semibold"
+                  className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold"
                   style={{ background: 'hsl(210 80% 45% / 0.15)', color: 'hsl(210,70%,65%)' }}
                 >
                   {history.length} {history.length === 1 ? 'session' : 'sessions'}
@@ -255,7 +260,7 @@ const Profile = () => {
             </div>
 
             {/* Rows */}
-            <div className="divide-y divide-white/5 min-h-[400px]">
+            <div className="divide-y divide-white/5 min-h-[300px]">
               {fetching ? (
                 <div className="flex flex-col items-center gap-3 py-20">
                   <div className="w-8 h-8 border-4 border-gold/30 border-t-gold rounded-full animate-spin" />
@@ -353,21 +358,21 @@ const StatCard = ({
   gradient: string;
 }) => (
   <div
-    className="relative rounded-2xl p-5 overflow-hidden flex items-center gap-4 hover:-translate-y-0.5 transition-transform"
+    className="relative rounded-2xl p-4 overflow-hidden flex items-center gap-3 hover:-translate-y-0.5 transition-transform"
     style={{ background: 'hsl(220 25% 12%)', border: `1px solid ${accent}33`, boxShadow: `0 0 25px ${accent}10` }}
   >
     <div
-      className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+      className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
       style={{ background: gradient, color: 'hsl(220 25% 8%)' }}
     >
-      {icon}
+      {React.cloneElement(icon as React.ReactElement, { className: 'h-4 w-4' })}
     </div>
     <div>
-      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{label}</p>
-      <p className="text-xl font-black mt-0.5" style={{ color: accent }}>{value}</p>
+      <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{label}</p>
+      <p className="text-lg font-black mt-0.5" style={{ color: accent }}>{value}</p>
     </div>
     <div
-      className="absolute -bottom-4 -right-4 w-20 h-20 rounded-full opacity-10"
+      className="absolute -bottom-4 -right-4 w-16 h-16 rounded-full opacity-10"
       style={{ background: accent }}
     />
   </div>
@@ -383,7 +388,7 @@ const HistoryRow = ({ session, index }: { session: GameSession; index: number })
   const cfg = statusConfig[session.status as keyof typeof statusConfig] ?? statusConfig.lost;
   return (
     <div
-      className="flex items-center gap-4 px-6 py-4 hover:bg-white/[0.02] transition-colors"
+      className="flex items-center gap-4 px-5 py-2.5 hover:bg-white/[0.02] transition-colors"
       style={{ animationDelay: `${index * 40}ms` }}
     >
       <div
@@ -468,8 +473,8 @@ const PasswordChangeDialog = ({ userId }: { userId: string }) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-gold/30 text-gold hover:bg-gold/10 transition-all">
-          <Lock className="h-4 w-4" /> Change Password
+        <button className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border border-gold/30 text-gold hover:bg-gold/10 transition-all">
+          <Lock className="h-3.5 w-3.5" /> Change Password
         </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[420px] border-gold/20" style={{ background: 'hsl(220 25% 10%)' }}>

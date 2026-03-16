@@ -19,6 +19,10 @@ const AdminSettings = () => {
   const [timerHard, setTimerHard] = useState(0);
   const [revealAnswer, setRevealAnswer] = useState(true);
   const [resetTimerPerQuestion, setResetTimerPerQuestion] = useState(true);
+  const [useFiftyFifty, setUseFiftyFifty] = useState(true);
+  const [useAudiencePoll, setUseAudiencePoll] = useState(true);
+  const [usePhoneFriend, setUsePhoneFriend] = useState(true);
+  const [useSkip, setUseSkip] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
@@ -41,6 +45,10 @@ const AdminSettings = () => {
       setTimerHard(sData.timerHard ?? 0);
       setRevealAnswer(sData.revealAnswer ?? true);
       setResetTimerPerQuestion(sData.resetTimerPerQuestion ?? true);
+      setUseFiftyFifty(sData.useFiftyFifty ?? true);
+      setUseAudiencePoll(sData.useAudiencePoll ?? true);
+      setUsePhoneFriend(sData.usePhoneFriend ?? true);
+      setUseSkip(sData.useSkip ?? true);
     } catch (error) {
       toast.error('Failed to load settings');
     } finally {
@@ -60,7 +68,10 @@ const AdminSettings = () => {
       await apiFetch('/admin/settings', {
         method: 'PUT',
         headers: { 'user-id': user.id },
-        body: JSON.stringify({ timerEasy, timerMedium, timerHard, revealAnswer, resetTimerPerQuestion }),
+        body: JSON.stringify({ 
+          timerEasy, timerMedium, timerHard, revealAnswer, resetTimerPerQuestion,
+          useFiftyFifty, useAudiencePoll, usePhoneFriend, useSkip
+        }),
       });
       toast.success('Game Settings updated successfully!');
     } catch (error: any) {
@@ -75,7 +86,7 @@ const AdminSettings = () => {
   }
 
   return (
-    <div className="h-[100dvh] w-full flex flex-col p-4 md:p-8 space-y-6 max-w-2xl mx-auto overflow-hidden">
+    <div className="min-h-screen w-full flex flex-col p-4 md:p-8 space-y-6 max-w-2xl mx-auto">
       <div className="flex justify-between items-center shrink-0">
         <Button variant="ghost" onClick={() => navigate('/admin')} className="text-muted-foreground hover:text-foreground">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
@@ -85,7 +96,7 @@ const AdminSettings = () => {
         </span>
       </div>
 
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div className="flex-1 flex flex-col">
         {/* GAME SETTINGS FORM */}
         <Card className="bg-card/50 backdrop-blur-sm border-border/50 flex flex-col shrink-0">
           <CardHeader className="shrink-0 pb-4">
@@ -149,6 +160,44 @@ const AdminSettings = () => {
                           <input type="checkbox" className="sr-only peer" checked={resetTimerPerQuestion} onChange={(e) => setResetTimerPerQuestion(e.target.checked)} />
                           <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
                         </label>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-border/30 pt-4 space-y-4">
+                      <h4 className="text-gold font-bold text-sm uppercase tracking-wider">Active Lifelines</h4>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="flex items-center justify-between p-3 rounded bg-white/5 border border-white/10">
+                          <span className="text-sm font-medium">50 : 50</span>
+                          <label className="relative inline-flex items-center cursor-pointer scale-75">
+                            <input type="checkbox" className="sr-only peer" checked={useFiftyFifty} onChange={(e) => setUseFiftyFifty(e.target.checked)} />
+                            <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                          </label>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 rounded bg-white/5 border border-white/10">
+                          <span className="text-sm font-medium">Audience Poll</span>
+                          <label className="relative inline-flex items-center cursor-pointer scale-75">
+                            <input type="checkbox" className="sr-only peer" checked={useAudiencePoll} onChange={(e) => setUseAudiencePoll(e.target.checked)} />
+                            <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                          </label>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 rounded bg-white/5 border border-white/10">
+                          <span className="text-sm font-medium">Phone a Friend</span>
+                          <label className="relative inline-flex items-center cursor-pointer scale-75">
+                            <input type="checkbox" className="sr-only peer" checked={usePhoneFriend} onChange={(e) => setUsePhoneFriend(e.target.checked)} />
+                            <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                          </label>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 rounded bg-white/5 border border-white/10">
+                          <span className="text-sm font-medium">Skip Question</span>
+                          <label className="relative inline-flex items-center cursor-pointer scale-75">
+                            <input type="checkbox" className="sr-only peer" checked={useSkip} onChange={(e) => setUseSkip(e.target.checked)} />
+                            <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                          </label>
+                        </div>
                       </div>
                     </div>
                 </div>

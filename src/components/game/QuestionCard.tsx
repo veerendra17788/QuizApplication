@@ -42,7 +42,7 @@ export const QuestionCard = ({
 
   const getChoiceText = (choice: 'A' | 'B' | 'C' | 'D'): string => {
     const choiceMap = { A: question.choiceA, B: question.choiceB, C: question.choiceC, D: question.choiceD };
-    return choiceMap[choice];
+    return (choiceMap as any)[choice];
   };
 
   const handleSubmit = () => {
@@ -143,6 +143,21 @@ export const QuestionCard = ({
           >
             {pending ? `🔒 Lock In  ${pending}` : 'Select an Answer First'}
           </button>
+        </div>
+      )}
+      {/* Result Overlay */}
+      {showResult && isCorrect !== null && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center animate-in zoom-in-95 duration-300 pointer-events-none">
+          <div className={cn(
+            "px-12 py-6 rounded-2xl border-4 shadow-2xl backdrop-blur-md transform rotate-[-5deg]",
+            isCorrect 
+              ? "bg-green-500/20 border-green-500 text-green-400 shadow-[0_0_50px_rgba(34,197,94,0.4)]" 
+              : "bg-red-500/20 border-red-500 text-red-400 shadow-[0_0_50px_rgba(239,68,68,0.4)]"
+          )}>
+            <span className="text-6xl font-black italic tracking-tighter uppercase" style={{ textShadow: isCorrect ? '0 0 20px rgba(34,197,94,0.6)' : '0 0 20px rgba(239,68,68,0.6)' }}>
+              {isCorrect ? 'Correct' : 'Wrong'}
+            </span>
+          </div>
         </div>
       )}
     </div>

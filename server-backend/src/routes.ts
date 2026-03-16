@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { User } from './models/User.js';
 import { Question } from './models/Question.js';
 import { GameSession } from './models/GameSession.js';
+import { Poll } from './models/Poll.js';
 import { Settings } from './models/Settings.js';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 const router = Router();
 
@@ -26,7 +28,7 @@ router.post('/auth/register', async (req, res) => {
     const user = new User({ email, password, name });
     await user.save();
 
-    res.status(201).json({ message: 'User created successfully', user: { id: user._id, name: user.name, email: user.email, isAdmin: user.isAdmin } });
+    res.status(201).json({ message: 'User created successfully', user: { id: user._id, name: user.name, email: user.email, isAdmin: (user as any).isAdmin } });
   } catch (error: any) {
     res.status(500).json({ message: 'Error creating user', error: error.message });
   }
@@ -48,7 +50,16 @@ router.post('/auth/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    res.json({ message: 'Login successful', user: { id: user._id, name: user.name, email: user.email, isAdmin: user.isAdmin } });
+    // Check for active quiz session lock (skip for admins)
+    const now = new Date();
+    if (!(user as any).isAdmin && user.activeQuizToken && user.activeQuizExpires && user.activeQuizExpires > now) {
+      return res.status(403).json({ 
+        message: 'Multiple logins are not allowed while a quiz is in progress. Please finish the quiz on your other device first.',
+        error: 'ACTIVE_QUIZ_LOCK' 
+      });
+    }
+
+    res.json({ message: 'Login successful', user: { id: user._id, name: user.name, email: user.email, isAdmin: (user as any).isAdmin } });
   } catch (error: any) {
     res.status(500).json({ message: 'Error logging in', error: error.message });
   }
@@ -121,7 +132,16 @@ router.get('/game/settings', async (req, res) => {
     let settings = await Settings.findOne();
     if (!settings) {
       // Default fallback if not initialized by admin yet
-      settings = new Settings({ timerEasy: 60, timerMedium: 60, timerHard: 0, revealAnswer: true });
+      settings = new Settings({ 
+        timerEasy: 60, 
+        timerMedium: 60, 
+        timerHard: 0, 
+        revealAnswer: true,
+        useFiftyFifty: true,
+        useAudiencePoll: true,
+        usePhoneFriend: true,
+        useSkip: true
+      });
       await settings.save();
     }
     res.json(settings);
@@ -130,11 +150,50 @@ router.get('/game/settings', async (req, res) => {
   }
 });
 
-// Save Game History
+// Start Game - Lock Session
+router.post('/game/start', async (req, res) => {
+  try {
+    const { userId, quizToken } = req.body;
+    if (!userId) return res.status(400).json({ message: 'User ID is required' });
+
+    const user = (await User.findById(userId)) as any;
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const now = new Date();
+    
+    // Check if there is an active lock on another device (skip for admins)
+    if (!user.isAdmin && user.activeQuizToken && user.activeQuizToken !== quizToken && user.activeQuizExpires && user.activeQuizExpires > now) {
+      return res.status(403).json({ 
+        message: 'Quiz is already active on another device.',
+        error: 'SESSION_LOCKED' 
+      });
+    }
+
+    // Create or refresh lock (valid for 1 hour)
+    const newToken = quizToken || crypto.randomBytes(16).toString('hex');
+    user.activeQuizToken = newToken;
+    user.activeQuizExpires = new Date(now.getTime() + 60 * 60 * 1000);
+    await user.save();
+
+    res.json({ message: 'Game started', quizToken: newToken });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error starting game', error: error.message });
+  }
+});
+
+// Save Game History - Validate and Clear Lock
 router.post('/game/history', async (req, res) => {
   try {
-    const { userId, status, finalAmount, questionsAnswered } = req.body;
+    const { userId, status, finalAmount, questionsAnswered, quizToken } = req.body;
     
+    const user = (await User.findById(userId)) as any;
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Validate token if provided (only if user is logged in)
+    if (user.activeQuizToken && user.activeQuizToken !== quizToken) {
+      return res.status(403).json({ message: 'Invalid or expired session token' });
+    }
+
     const session = new GameSession({
       userId,
       status, // 'won', 'lost', 'quit'
@@ -144,11 +203,14 @@ router.post('/game/history', async (req, res) => {
     
     await session.save();
 
-    // Update user stats
-    await User.findByIdAndUpdate(userId, {
-      $inc: { gamesPlayed: 1, winnings: finalAmount },
-      $max: { highScore: finalAmount }
-    });
+    // Update user stats and CLEAR lock
+    user.gamesPlayed += 1;
+    user.winnings += finalAmount;
+    if (finalAmount > user.highScore) user.highScore = finalAmount;
+    
+    user.activeQuizToken = null;
+    user.activeQuizExpires = null;
+    await user.save();
 
     res.status(201).json({ message: 'Game session saved', session });
   } catch (error: any) {
@@ -164,6 +226,70 @@ router.get('/game/history/:userId', async (req, res) => {
     res.json(history);
   } catch (error: any) {
     res.status(500).json({ message: 'Error fetching game history', error: error.message });
+  }
+});
+
+// --- POLL ROUTES ---
+
+// Create a Poll
+router.post('/poll/create', async (req, res) => {
+  try {
+    const { question, choices } = req.body;
+    
+    // Generate unique 6-digit code
+    let code;
+    let exists = true;
+    while (exists) {
+      code = Math.floor(100000 + Math.random() * 900000).toString();
+      const existing = await Poll.findOne({ code });
+      if (!existing) exists = false;
+    }
+
+    const poll = new Poll({
+      code,
+      question,
+      choices,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000) // 1 hour TTL
+    });
+
+    await poll.save();
+    res.status(201).json({ code, pollId: poll._id });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error creating poll', error: error.message });
+  }
+});
+
+// Get Poll Results
+router.get('/poll/:code', async (req, res) => {
+  try {
+    const poll = await Poll.findOne({ code: req.params.code });
+    if (!poll) return res.status(404).json({ message: 'Poll not found or expired' });
+    res.json(poll);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error fetching poll', error: error.message });
+  }
+});
+
+// Cast a Vote (Anonymous)
+router.post('/poll/:code/vote', async (req, res) => {
+  try {
+    const { choice } = req.body;
+    if (!['A', 'B', 'C', 'D'].includes(choice)) {
+      return res.status(400).json({ message: 'Invalid choice' });
+    }
+
+    const poll = await Poll.findOne({ code: req.params.code });
+    if (!poll) return res.status(404).json({ message: 'Poll not found or expired' });
+
+    // Increment vote count atomically
+    const update: any = {};
+    update[`votes.${choice}`] = 1;
+    
+    await Poll.updateOne({ code: req.params.code }, { $inc: update });
+
+    res.json({ message: 'Vote recorded' });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error voting', error: error.message });
   }
 });
 
@@ -187,7 +313,7 @@ const isAdmin = async (req: any, res: any, next: any) => {
     const userId = req.headers['user-id'];
     if (!userId) return res.status(401).json({ message: 'Unauthorized' });
     
-    const user = await User.findById(userId);
+    const user = (await User.findById(userId)) as any;
     if (!user || !user.isAdmin) {
       return res.status(403).json({ message: 'Forbidden: Admin access required' });
     }
@@ -197,21 +323,50 @@ const isAdmin = async (req: any, res: any, next: any) => {
   }
 };
 
-// Get All Questions (Admin)
+// Get Questions (Admin) with Pagination
 router.get('/admin/questions', isAdmin, async (req, res) => {
   try {
-    const questions = await Question.find().sort({ level: 1 });
-    res.json(questions);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+
+    const totalCount = await Question.countDocuments();
+    const questions = await Question.find()
+      .sort({ level: 1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.json({
+      data: questions,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: page
+    });
   } catch (error: any) {
     res.status(500).json({ message: 'Error fetching questions', error: error.message });
   }
 });
 
-// Get All Users (Admin)
+// Get Users (Admin) with Pagination
 router.get('/admin/users', isAdmin, async (req, res) => {
   try {
-    const users = await User.find().select('-password').sort({ createdAt: -1 });
-    res.json(users);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+
+    const totalCount = await User.countDocuments();
+    const users = await User.find()
+      .select('-password')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.json({
+      data: users,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: page
+    });
   } catch (error: any) {
     res.status(500).json({ message: 'Error fetching users', error: error.message });
   }
@@ -220,7 +375,10 @@ router.get('/admin/users', isAdmin, async (req, res) => {
 // Update Settings (Admin)
 router.put('/admin/settings', isAdmin, async (req, res) => {
   try {
-    const { timerEasy, timerMedium, timerHard, revealAnswer, resetTimerPerQuestion } = req.body;
+    const { 
+      timerEasy, timerMedium, timerHard, revealAnswer, resetTimerPerQuestion,
+      useFiftyFifty, useAudiencePoll, usePhoneFriend, useSkip
+    } = req.body;
     
     let settings = await Settings.findOne();
     if (!settings) {
@@ -232,6 +390,10 @@ router.put('/admin/settings', isAdmin, async (req, res) => {
       settings.timerHard = timerHard !== undefined ? timerHard : settings.timerHard;
       settings.revealAnswer = revealAnswer !== undefined ? revealAnswer : settings.revealAnswer;
       settings.resetTimerPerQuestion = resetTimerPerQuestion !== undefined ? resetTimerPerQuestion : settings.resetTimerPerQuestion;
+      settings.useFiftyFifty = useFiftyFifty !== undefined ? useFiftyFifty : settings.useFiftyFifty;
+      settings.useAudiencePoll = useAudiencePoll !== undefined ? useAudiencePoll : settings.useAudiencePoll;
+      settings.usePhoneFriend = usePhoneFriend !== undefined ? usePhoneFriend : settings.usePhoneFriend;
+      settings.useSkip = useSkip !== undefined ? useSkip : settings.useSkip;
       await settings.save();
     }
     

@@ -7,6 +7,11 @@ const SettingsSchema = new mongoose.Schema(
     timerHard: { type: Number, default: 0 },
     revealAnswer: { type: Boolean, default: true },
     resetTimerPerQuestion: { type: Boolean, default: true },
+    // Lifeline toggles
+    useFiftyFifty: { type: Boolean, default: true },
+    useAudiencePoll: { type: Boolean, default: true },
+    usePhoneFriend: { type: Boolean, default: true },
+    useSkip: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
