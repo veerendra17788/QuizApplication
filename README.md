@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18.3-61dafb)](https://reactjs.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green)](https://nodejs.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-blue)](https://www.postgresql.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-6.0+-green)](https://www.mongodb.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## ✨ Features
@@ -26,8 +26,8 @@
 
 ### 📊 Backend Features
 - RESTful API with Express.js + TypeScript
-- PostgreSQL database with optimized schema
-- Redis caching for performance
+- MongoDB database with Mongoose ODM
+- Redis caching (optional)
 - WebSocket support via Socket.IO
 - Comprehensive error handling and logging
 
@@ -68,7 +68,7 @@ docker-compose up -d
 
 **Prerequisites:**
 - Node.js 18+
-- PostgreSQL 14+
+- MongoDB 6.0+
 - Redis 7+ (optional for dev)
 
 ```bash
@@ -76,24 +76,12 @@ docker-compose up -d
 npm install
 
 # 2. Install backend dependencies
-cd server
+cd server-backend
 npm install
 
-# 3. Set up database
-psql -U postgres -c "CREATE DATABASE million_quest"
-psql -U postgres -d million_quest -f src/db/schema.sql
-psql -U postgres -d million_quest -f src/db/seed.sql
-
-# 4. Configure environment
+# 3. Configure environment
 cp .env.example .env
-# Edit .env with your settings
-
-# 5. Start backend
-npm run dev
-
-# 6. Start frontend (in new terminal)
-cd ..
-npm run dev
+# Edit .env with your MongoDB URI
 ```
 
 📖 **Detailed Setup Guide**: See [SETUP.md](SETUP.md) for comprehensive instructions.
@@ -102,13 +90,13 @@ npm run dev
 
 ```
 million-quest-engine/
-├── server/                 # Backend API (Node.js + Express)
+├── server-backend/         # Backend API (Node.js + Express)
 │   ├── src/
 │   │   ├── config/        # Configuration files
-│   │   ├── db/            # Database schema & migrations
+│   │   ├── db.ts          # MongoDB connection
 │   │   ├── middleware/    # Express middleware
 │   │   ├── services/      # Business logic
-│   │   ├── routes/        # API routes
+│   │   ├── routes.ts      # API routes
 │   │   ├── types/         # TypeScript definitions
 │   │   └── utils/         # Helper functions
 │   └── package.json
@@ -140,8 +128,8 @@ million-quest-engine/
 ### Backend
 - **Runtime**: Node.js 18+
 - **Framework**: Express.js with TypeScript
-- **Database**: PostgreSQL 14+
-- **Cache**: Redis 7+
+- **Database**: MongoDB 6.0+
+- **ORM**: Mongoose
 - **Real-time**: Socket.IO
 - **Authentication**: JWT + Refresh Tokens
 - **Validation**: Zod
@@ -184,48 +172,24 @@ million-quest-engine/
 
 **Backend** (`server/.env`):
 ```env
-DATABASE_URL=postgresql://postgres:password@localhost:5432/million_quest
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=your-secret-key-min-32-chars
-JWT_REFRESH_SECRET=your-refresh-secret-key
+MONGODB_URI=mongodb+srv://...
+JWT_SECRET=your-secret-key
 CORS_ORIGIN=http://localhost:5173
 ```
 
 **Frontend** (`.env`):
 ```env
-VITE_API_URL=http://localhost:3001/api/v1
-VITE_WS_URL=ws://localhost:3001
-```
-
-## 🧪 Testing
-
-```bash
-# Backend tests
-cd server
-npm test
-
-# Frontend tests
-npm test
-
-# E2E tests
-npm run test:e2e
+VITE_API_URL=http://localhost:3001/api
 ```
 
 ## 🚢 Deployment
 
-### Docker Production
+### Split Deployment (Recommended)
 
-```bash
-docker-compose -f docker-compose.prod.yml up -d
-```
+- **Backend**: Deploy on [Render](https://render.com) (Root: `server-backend`)
+- **Frontend**: Deploy on [Vercel](https://vercel.com) (Root: `./`)
 
-### Cloud Deployment
-
-Supports deployment to:
-- **Heroku** - See deployment guide
-- **AWS** (ECS/EKS + RDS + ElastiCache)
-- **Google Cloud** (Cloud Run + Cloud SQL + Memorystore)
-- **Azure** (App Service + Azure Database + Redis Cache)
+See [deployment_guide.md](deployment_guide.md) for details.
 
 ## 🔐 Default Credentials
 
